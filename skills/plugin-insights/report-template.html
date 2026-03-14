@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Insights Report</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --text: #e1e4ed;
+      --text-dim: #8b8fa3;
+      --accent: #6c8aff;
+      --accent-dim: #3d5afe;
+      --green: #4caf50;
+      --yellow: #ffb74d;
+      --red: #ef5350;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+
+    .card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .card .detail {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    section h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin: 1rem 0 0.5rem 0;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    ul li {
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    ul li:last-child { border-bottom: none; }
+
+    ol {
+      padding-left: 1.5rem;
+    }
+
+    ol li {
+      padding: 0.4rem 0;
+      font-size: 0.9rem;
+    }
+
+    .plugin-tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-right: 0.5rem;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin: 0.75rem 0;
+      font-size: 0.85rem;
+    }
+
+    .stats-row .stat-label {
+      color: var(--text-dim);
+    }
+
+    .stats-row .stat-value {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      margin-top: 0.5rem;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+
+    .bar-fill-accent { background: var(--accent); }
+    .bar-fill-green { background: var(--green); }
+    .bar-fill-yellow { background: var(--yellow); }
+    .bar-fill-red { background: var(--red); }
+
+    .score-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .score-good { background: rgba(76, 175, 80, 0.15); color: var(--green); }
+    .score-ok { background: rgba(255, 183, 77, 0.15); color: var(--yellow); }
+    .score-bad { background: rgba(239, 83, 80, 0.15); color: var(--red); }
+
+    .suggestion {
+      padding: 0.75rem 1rem;
+      background: rgba(108, 138, 255, 0.08);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+
+    .trend-bar {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 30px;
+      vertical-align: middle;
+    }
+
+    .trend-bar .week {
+      width: 12px;
+      border-radius: 2px 2px 0 0;
+      background: var(--accent);
+      min-height: 2px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-dim);
+      font-size: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.5rem;
+      border-bottom: 2px solid var(--border);
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    td {
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .footer {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Plugin Insights Report</h1>
+  <p class="subtitle">Generated: {{generated_date}} | Zeitraum: {{date_range}}</p>
+
+  <!-- Overview Cards -->
+  <div class="grid">
+    <div class="card">
+      <h2>Plugins analysiert</h2>
+      <div class="value">{{total_plugins}}</div>
+    </div>
+    <div class="card">
+      <h2>Sessions mit Plugins</h2>
+      <div class="value">{{total_sessions}}</div>
+      <div class="detail">von {{total_sessions_scanned}} gescannt</div>
+    </div>
+    <div class="card">
+      <h2>Gesamte Tokens</h2>
+      <div class="value">{{total_tokens}}</div>
+      <div class="detail">Input + Output</div>
+    </div>
+    <div class="card">
+      <h2>Fehlerrate</h2>
+      <div class="value {{error_rate_class}}">{{error_rate}}%</div>
+      <div class="detail">{{total_errors}} Fehler gesamt</div>
+    </div>
+  </div>
+
+  <!-- Per-Plugin Sections -->
+  {{plugin_sections}}
+
+  <!-- Empty state fallback -->
+  {{empty_state}}
+
+  <p class="footer">Generated by plugin-insights v0.1.0</p>
+</body>
+</html>
