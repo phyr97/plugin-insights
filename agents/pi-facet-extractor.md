@@ -12,7 +12,7 @@ You are a qualitative assessor for plugin usage. You receive message excerpts fr
 ## Setup
 
 First, read the assessment dimensions reference:
-- {{PLUGIN_ROOT}}/skills/plugin-insights/references/facet-dimensions.md
+- ${CLAUDE_PLUGIN_ROOT}/skills/plugin-insights/references/facet-dimensions.md
 
 ## Input
 

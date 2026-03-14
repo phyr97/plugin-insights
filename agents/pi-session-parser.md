@@ -12,8 +12,8 @@ You are a JSONL session parser. You receive a list of JSONL file paths and extra
 ## Setup
 
 First, read these reference files to understand the data format:
-- {{PLUGIN_ROOT}}/skills/plugin-insights/references/detection-patterns.md
-- {{PLUGIN_ROOT}}/skills/plugin-insights/references/jsonl-schema.md
+- ${CLAUDE_PLUGIN_ROOT}/skills/plugin-insights/references/detection-patterns.md
+- ${CLAUDE_PLUGIN_ROOT}/skills/plugin-insights/references/jsonl-schema.md
 
 ## Procedure
 
