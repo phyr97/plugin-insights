@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -238,28 +238,28 @@
 </head>
 <body>
   <h1>Plugin Insights Report</h1>
-  <p class="subtitle">Generated: {{generated_date}} | Zeitraum: {{date_range}}</p>
+  <p class="subtitle">Generated: {{generated_date}} | Period: {{date_range}}</p>
 
   <!-- Overview Cards -->
   <div class="grid">
     <div class="card">
-      <h2>Plugins analysiert</h2>
+      <h2>Plugins analyzed</h2>
       <div class="value">{{total_plugins}}</div>
     </div>
     <div class="card">
-      <h2>Sessions mit Plugins</h2>
+      <h2>Sessions with plugins</h2>
       <div class="value">{{total_sessions}}</div>
-      <div class="detail">von {{total_sessions_scanned}} gescannt</div>
+      <div class="detail">of {{total_sessions_scanned}} scanned</div>
     </div>
     <div class="card">
-      <h2>Gesamte Tokens</h2>
+      <h2>Total tokens</h2>
       <div class="value">{{total_tokens}}</div>
       <div class="detail">Input + Output</div>
     </div>
     <div class="card">
-      <h2>Fehlerrate</h2>
+      <h2>Error rate</h2>
       <div class="value {{error_rate_class}}">{{error_rate}}%</div>
-      <div class="detail">{{total_errors}} Fehler gesamt</div>
+      <div class="detail">{{total_errors}} errors total</div>
     </div>
   </div>
 

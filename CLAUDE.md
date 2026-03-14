@@ -1,30 +1,31 @@
 # plugin-insights
 
-Analysiert JSONL-Session-Transkripte von Claude Code und generiert einen HTML-Report, der zeigt, wie gut installierte Plugins in der Praxis funktionieren.
+Analyzes JSONL session transcripts from Claude Code and generates an HTML report showing how well installed plugins perform in practice.
 
-## Befehle
+## Commands
 
-- `/plugin-insights` -- Alle Plugins der letzten 7 Tage analysieren
-- `/plugin-insights <name>` -- Nur ein bestimmtes Plugin analysieren (z.B. `deep-research`)
-- `/plugin-insights --days N` -- Analysezeitraum anpassen (Standard: 7 Tage)
+- `/plugin-insights` -- Analyze all plugins from the last 7 days
+- `/plugin-insights <name>` -- Analyze a specific plugin (e.g. `deep-research`)
+- `/plugin-insights --days N` -- Adjust the analysis period (default: 7 days)
 
-## Architektur
+## Architecture
 
-Dreistufige Agent-Hierarchie:
+Three-tier agent hierarchy:
 
-1. Orchestrator (Sonnet): Koordiniert den Ablauf, aggregiert Ergebnisse, rendert den HTML-Report per Python-Script
-2. Parser-Agents (Haiku): Lesen JSONL-Dateien, extrahieren Plugin-Aktivitaet und Token-Usage
-3. Facet-Agents (Haiku): Bewerten Plugin-Nutzung qualitativ anhand von Message-Excerpts
+1. Orchestrator (session model): Coordinates the workflow, aggregates results, renders the HTML report via Python script
+2. Parser agents (Haiku): Read JSONL files, extract plugin activity and token usage
+3. Facet agents (Haiku): Assess plugin usage qualitatively based on message excerpts
 
-Der Orchestrator liest nie selbst JSONL-Dateien. Alles Parsing wird an Parser-Agents delegiert. Template-Rendering laeuft ueber `python3` mit `str.replace()`.
+The orchestrator never reads JSONL files directly. All parsing is delegated to parser agents. Template rendering runs via `python3` with `str.replace()`.
 
-## Verzeichnisstruktur
+## Directory structure
 
 ```
 commands/plugin-insights.md           # Orchestrator slash command
 agents/pi-session-parser.md           # JSONL parser agent (Haiku)
 agents/pi-facet-extractor.md          # Qualitative facet extraction (Haiku)
 skills/plugin-insights/
+  SKILL.md                            # Orchestration logic
   references/
     jsonl-schema.md                   # JSONL field documentation
     facet-dimensions.md               # Qualitative assessment dimensions
@@ -34,4 +35,4 @@ skills/plugin-insights/
 
 ## Output
 
-Report wird geschrieben nach `~/.claude/plugin-insights/report.html`. Selbststaendige HTML-Datei mit eingebettetem CSS, kein JavaScript.
+Report is written to `~/.claude/plugin-insights/report.html`. Self-contained HTML file with embedded CSS, no JavaScript.

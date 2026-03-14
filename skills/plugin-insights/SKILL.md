@@ -106,7 +106,7 @@ Agent(
 ## Error handling
 
 - If no JSONL files found in date range: report "No sessions found" and stop.
-- If no plugin activity found: write a minimal HTML report stating "Keine Plugin-Aktivitaet im Zeitraum gefunden" and print the path.
+- If no plugin activity found: write a minimal HTML report stating "No plugin activity found in the selected period" and print the path.
 - If all parser batches fail: write an error report listing which batches failed and why. Do not produce an empty report silently.
 - Individual session failures are acceptable. Log them but continue processing.
 
