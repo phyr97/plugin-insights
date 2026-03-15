@@ -33,13 +33,13 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 
 ## Phase 2: Parse (parallel batches)
 
-Spawn pi-session-parser agents. For each batch:
+Spawn pi-session-parser agents. Each agent has inline references in its definition, so no external files need to be passed. For each batch:
 
 ```
 Agent(
   subagent_type: "plugin-insights:pi-session-parser",
   model: "haiku",
-  prompt: "Parse these JSONL files for plugin activity.\n\nFiles:\n<file-list>\n\nPlugin root: <PLUGIN_ROOT_PATH>\n\n<optional: Only extract data for plugin: X>"
+  prompt: "Parse these JSONL files for plugin activity.\n\nFiles:\n<file-list>\n\n<optional: Only extract data for plugin: X>"
 )
 ```
 
@@ -52,13 +52,13 @@ Agent(
 
 Collect all `excerpts` from parser results. Bundle into batches of max 15 assessments.
 
-Spawn pi-facet-extractor agents:
+Spawn pi-facet-extractor agents. Each agent has inline assessment dimensions, so no external files need to be passed:
 
 ```
 Agent(
   subagent_type: "plugin-insights:pi-facet-extractor",
   model: "haiku",
-  prompt: "Assess these plugin usage excerpts.\n\nPlugin root: <PLUGIN_ROOT_PATH>\n\nExcerpts:\n<json-excerpts>"
+  prompt: "Assess these plugin usage excerpts.\n\nExcerpts:\n<json-excerpts>"
 )
 ```
 
