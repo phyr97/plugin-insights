@@ -8,19 +8,45 @@ description: |
 allowed-tools: Read, Glob, Grep, Bash(find:*), Bash(echo:*), Bash(ls:*), Bash(wc:*), Bash(mkdir:*), Agent, Write
 ---
 
+## STOP — Parse arguments first
+
+Arguments received: $ARGUMENTS
+
+Before ANY other action, extract from the arguments above:
+- **Plugin filter**: any word that is not a flag (e.g. "review", "deep-research"). This is the PLUGIN_FILTER.
+- **--days N**: number of days to scan. Default: 7.
+
+If a plugin filter is present, set PLUGIN_FILTER to that word and use it in ALL subsequent phases.
+If no arguments or empty: PLUGIN_FILTER = none, scan all plugins.
+
+You CANNOT proceed to Phase 1 without having parsed this block.
+
 ## Iron Laws (NON-NEGOTIABLE)
 
 1. NEVER read full JSONL files yourself. Delegate ALL detailed parsing to pi-session-parser agents.
 2. NEVER do content quality assessment yourself. Delegate to pi-quality-reviewer agents.
 3. ALWAYS write an HTML report file. No chat-only output.
 4. Respect batch sizes: max 15 sessions per parser, max 15 reviews per quality-reviewer.
-5. NEVER write the HTML report yourself. ALWAYS delegate report writing to the pi-report-writer agent. It has a fresh context and will follow the template exactly.
+5. NEVER write the HTML report yourself. ALWAYS delegate report writing to the pi-report-writer agent.
+6. ALWAYS pass PLUGIN_FILTER to parser agents. If PLUGIN_FILTER is set, every parser agent prompt MUST include "Only extract data for plugin: PLUGIN_FILTER".
+
+## Anti-skip rules
+
+| Thought | Reality |
+|---------|---------|
+| "No plugin filter given" | Check the $ARGUMENTS block above. If it contains a word like "review", that IS the filter. |
+| "I'll filter later during aggregation" | Pre-filtering in Phase 1 saves 80% of parser token costs. Do it now. |
+| "Let me start finding files first" | STOP. Parse arguments before touching any files. |
+| "I'll scan everything and filter later" | NO. The pre-filter step is MANDATORY when PLUGIN_FILTER is set. |
 
 ## Phase 1: Discovery and pre-filtering
 
-1. Parse arguments: extract optional plugin filter and --days N (default 7).
+1. **GATE CHECK** — Confirm argument parsing:
+   - State the plugin filter you extracted: "PLUGIN_FILTER = ___" (or "none")
+   - State the --days value you extracted: "DAYS = ___" (or "7")
+   - If you cannot answer both, go back to the argument parsing block above.
 
-2. If a plugin filter is given, validate it:
+2. If PLUGIN_FILTER is set, validate it:
    - Use Grep to scan a sample of recent JSONL files (up to 20) for the exact plugin name in `subagent_type` or `command-name` patterns.
    - Collect all unique plugin names found (extract the part before the colon from `subagent_type` values).
    - If the given filter matches no plugin exactly, check for fuzzy matches:
@@ -29,18 +55,19 @@ allowed-tools: Read, Glob, Grep, Bash(find:*), Bash(echo:*), Bash(ls:*), Bash(wc
    - If fuzzy matches are found, present them to the user: "Plugin 'X' not found. Did you mean one of these? 1. deep-research  2. review  3. ..." and wait for confirmation.
    - If no matches at all, report "No plugin matching 'X' found in recent sessions" and stop.
 
-3. List all JSONL session files modified within the --days range:
+3. List all JSONL session files modified within the DAYS range:
    ```bash
    find ~/.claude/projects -name "*.jsonl" -maxdepth 2 -mtime -DAYS
    ```
-   This returns only session files modified within the last N days. No Python needed.
 
-4. Pre-filter sessions (ORCHESTRATOR does this, not agents):
-   If a plugin filter is set, use Grep to scan each session file for the structural pattern `"name":\s*"Agent".*subagent_type.*<plugin-name>:` OR `<command-name>.*<plugin-name>:`. Use output_mode "count" for speed. Only keep files with at least 1 match.
+4. **MANDATORY pre-filter** (if PLUGIN_FILTER is set):
+   You MUST grep each session file BEFORE adding it to a batch.
+   Pattern: `"name":\s*"Agent".*subagent_type.*PLUGIN_FILTER:` OR `command-name.*PLUGIN_FILTER:`
+   Use output_mode "count" for speed. Only files with >= 1 match go to parsers.
 
-   Report: "Found N sessions total, M contain <plugin-name> activity. Sending M sessions to parsers..."
+   Report: "Found N sessions total, M contain PLUGIN_FILTER activity. Sending M to parsers..."
 
-   If no plugin filter: skip pre-filtering, send all sessions to parsers.
+   If PLUGIN_FILTER is "none": skip pre-filtering, send all sessions to parsers.
 
 5. Group the filtered files into batches of 15.
 
@@ -52,9 +79,11 @@ Spawn pi-session-parser agents (model: sonnet). Each agent extracts invocations,
 Agent(
   subagent_type: "plugin-insights:pi-session-parser",
   model: "sonnet",
-  prompt: "Parse these JSONL files for plugin activity.\n\nFiles:\n<file-list>\n\n<optional: Only extract data for plugin: X>"
+  prompt: "Parse these JSONL files for plugin activity.\n\nFiles:\n<file-list>\n\nOnly extract data for plugin: PLUGIN_FILTER"
 )
 ```
+
+If PLUGIN_FILTER is "none", omit the "Only extract data for plugin" line.
 
 - Spawn up to 4 parser agents in parallel per round
 - Collect structured JSON results from each agent
