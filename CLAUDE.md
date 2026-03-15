@@ -38,6 +38,23 @@ skills/plugin-insights/
 
 Report is written to `~/.claude/plugin-insights/report.html`. Self-contained HTML file with embedded CSS, no JavaScript. Supports light and dark mode via system preference.
 
+## Permissions setup
+
+This plugin reads JSONL session files from `~/.claude/projects/`. Claude Code will ask for permission on each directory the first time. To avoid repeated prompts, add this to your `~/.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/<your-username>/.claude/projects/**)",
+      "Grep(//Users/<your-username>/.claude/projects/**)"
+    ]
+  }
+}
+```
+
+Replace `<your-username>` with your system username. The double slash `//` marks an absolute path.
+
 ## No external dependencies
 
 No Python, Node, or other runtimes required. The orchestrator writes HTML directly via the Write tool, guided by the reference template. Session discovery uses `find`.
