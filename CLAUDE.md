@@ -26,6 +26,7 @@ The orchestrator pre-filters sessions via Grep before sending them to parsers. T
 commands/plugin-insights.md           # Slash command (thin wrapper)
 agents/pi-session-parser.md           # JSONL parser agent (Sonnet)
 agents/pi-quality-reviewer.md         # Content quality reviewer (Sonnet)
+agents/pi-report-writer.md            # HTML report writer (Sonnet)
 skills/plugin-insights/
   SKILL.md                            # Orchestration logic
   references/
@@ -36,7 +37,7 @@ skills/plugin-insights/
 
 ## Output
 
-Report is written to `~/.claude/plugin-insights/report.html`. Self-contained HTML file with embedded CSS, no JavaScript. Supports light and dark mode via system preference.
+Reports are written to `~/.claude/plugin-insights/report-<plugin>-<date-time>.html`. Each run creates a new file, previous reports are preserved. Self-contained HTML with embedded CSS, no JavaScript. Supports light and dark mode via system preference.
 
 ## Permissions setup
 
@@ -55,6 +56,10 @@ This plugin reads JSONL session files from `~/.claude/projects/`. Claude Code wi
 
 Replace `<your-username>` with your system username. The double slash `//` marks an absolute path.
 
+## Known issues
+
+Extended thinking (high/adaptive think budget) on Opus can cause the orchestrator to bypass SKILL.md instructions entirely (GitHub issue #23936). If the plugin produces unexpected output, try running it with thinking disabled or on Sonnet.
+
 ## No external dependencies
 
-No Python, Node, or other runtimes required. The orchestrator writes HTML directly via the Write tool, guided by the reference template. Session discovery uses `find`.
+No Python, Node, or other runtimes required. The orchestrator delegates HTML report writing to a dedicated report-writer agent. Session discovery uses `find`.

@@ -21,12 +21,23 @@ If no arguments or empty: PLUGIN_FILTER = none, scan all plugins.
 
 ## REQUIRED OUTPUT (print this before doing anything else)
 
+Copy this entire checklist into your response and fill in the values. Then check off each phase as you complete it.
+
 ```
 PLUGIN_FILTER = <extracted filter or "none">
 DAYS = <extracted days or "7">
+
+Progress:
+- [ ] Phase 1: Discovery and pre-filtering
+- [ ] Phase 2: Parse sessions
+- [ ] Phase 3: Quality review
+- [ ] Phase 4: Aggregate
+- [ ] Phase 5: Write HTML report
 ```
 
-You MUST print the block above as your first output. If you cannot fill in both values, re-read the $ARGUMENTS line. You CANNOT call any tool, run any command, or proceed to Phase 1 until this block is printed.
+You MUST print this checklist as your first output. You CANNOT call any tool, run any command, or proceed to Phase 1 until this checklist is printed with PLUGIN_FILTER and DAYS filled in.
+
+After completing each phase, reprint the checklist with the completed phase checked off (`[x]`). This makes skipping visible.
 
 ## Iron Laws (NON-NEGOTIABLE)
 
