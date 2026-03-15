@@ -33,7 +33,13 @@ Problems observed. One sentence max, or null if none.
 ### 4. Strengths (strength)
 What worked well. One sentence max, or null if nothing stood out.
 
-Only assess messages surrounding plugin invocations (5 before, 10 after). When ambiguous, set correction_score to 1 and completion_score to 1.
+Only assess messages surrounding plugin invocations (5 before, 10 after).
+
+IMPORTANT: Only use the default ambiguous scores (correction_score: 1, completion_score: 1) as a last resort when there is truly no signal at all. Look carefully for ANY evidence:
+- If the user continues working without complaint after the plugin call, that is evidence of completion (score 2) and no correction (score 0).
+- If the user says "thanks", "perfect", "gut", or moves on to a new topic, that suggests success.
+- If the session just ends after the plugin output with no further messages, score completion as 1 (ambiguous) but correction as 0 (no correction observed).
+- Only use 1/1 when the excerpt is truly empty or contains only tool output with no user reaction visible.
 
 ## Input
 

@@ -12,9 +12,10 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 
 1. NEVER read full JSONL files yourself. Delegate ALL parsing to pi-session-parser agents.
 2. NEVER do qualitative assessment yourself. Delegate to pi-facet-extractor agents.
-3. ALWAYS write an HTML report. No chat-only output.
+3. ALWAYS write an HTML report using the template file. NEVER generate your own HTML structure.
 4. Respect batch sizes: max 15 sessions per parser, max 15 assessments per facet-extractor.
-5. ALWAYS use Bash(python3:...) for template placeholder replacement. NEVER fill HTML templates by string manipulation yourself.
+5. ALWAYS use Bash(python3:...) to read the template file and replace placeholders via str.replace(). The python script must read the ACTUAL template file from disk. NEVER write HTML yourself.
+6. ALWAYS read the template from `${CLAUDE_SKILL_DIR}/report-template.html`. Pass this exact path to the python script.
 
 ## Phase 1: Discovery
 
@@ -72,41 +73,56 @@ Agent(
    - Total invocations, sessions, unique projects
    - Token consumption (input + output, main + subagents)
    - Error rate (errors / invocations)
-   - Average correction_score, average completion_score
+   - Average correction_score, average completion_score (exclude default 1.0 scores from averages if possible)
    - Top friction points (group similar ones by keyword overlap)
    - Top strengths (group similar ones)
-   - Trend over time (weekly buckets based on session timestamps)
+   - Trend over time: bucket sessions by ISO week, compute invocations per week for the last 7 weeks
 
-2. Generate improvement suggestions per plugin:
+2. Mark sessions from projects whose path contains the plugin name itself as "dev sessions" (e.g. sessions from `*-deep-research*` when analyzing deep-research). Report dev vs. production stats separately.
+
+3. Generate improvement suggestions per plugin:
    - High correction scores (avg > 1.5) -> "Plugin prompt needs refinement"
    - High error rates (> 20%) -> "Tool configuration or permission issues"
    - Low completion (avg < 1.0) -> "Scope or reliability problems"
 
-3. Build a JSON object containing all aggregated data and write it to `/tmp/plugin-insights-data.json`
+4. Build a JSON object containing all aggregated data. The JSON must include these keys matching template placeholders:
+   - `generated_date`, `date_range`
+   - `total_plugins`, `total_sessions`, `total_sessions_scanned`
+   - `total_tokens` (formatted like "1.2M" or "450K", or "N/A" if unavailable)
+   - `error_rate`, `error_rate_class` ("score-good"/"score-ok"/"score-bad"), `total_errors`
+   - `plugin_sections`: a complete HTML string for all per-plugin sections
+   - `empty_state`: empty string if plugins found, or `<div class="empty-state">No plugin activity found</div>` if none
+   Write this JSON to `/tmp/plugin-insights-data.json`.
 
-4. Read the HTML template:
-   ```
-   Read("${CLAUDE_SKILL_DIR}/report-template.html")
-   ```
+5. The `plugin_sections` HTML string must use the CSS classes defined in the template:
+   - `.stats-row` with `.stat-label` and `.stat-value` spans
+   - `.score-badge` with `.score-good`/`.score-ok`/`.score-bad`
+   - `.plugin-tag` for agent types
+   - `.suggestion` for improvement suggestions
+   - `.trend-bar` with `.week` divs for weekly trend (height as percentage of max week)
+   - `<section>` wrapper with `<h2>` plugin name and `<h3>` sub-headings
 
-5. Use Bash(python3:...) to render the report:
+6. Read the HTML template file and render the report using Bash(python3:...):
    ```python
-   import json
+   import json, os
    with open('/tmp/plugin-insights-data.json') as f:
        data = json.load(f)
    with open('<TEMPLATE_PATH>') as f:
        html = f.read()
-   # Replace all {{placeholder}} values using str.replace()
-   # For {{plugin_sections}}, build HTML string from data
-   # Write to ~/.claude/plugin-insights/report.html
+   for key, value in data.items():
+       html = html.replace('{{' + key + '}}', str(value))
+   os.makedirs(os.path.expanduser('~/.claude/plugin-insights'), exist_ok=True)
+   with open(os.path.expanduser('~/.claude/plugin-insights/report.html'), 'w') as f:
+       f.write(html)
    ```
+   TEMPLATE_PATH is the path to `report-template.html` read via `${CLAUDE_SKILL_DIR}/report-template.html`.
 
-6. Print: "Report written to ~/.claude/plugin-insights/report.html"
+7. Print: "Report written to ~/.claude/plugin-insights/report.html"
 
 ## Error handling
 
 - If no JSONL files found in date range: report "No sessions found" and stop.
-- If no plugin activity found: write a minimal HTML report stating "No plugin activity found in the selected period" and print the path.
+- If no plugin activity found: write a minimal report using the template with `{{empty_state}}` filled and `{{plugin_sections}}` empty.
 - If all parser batches fail: write an error report listing which batches failed and why. Do not produce an empty report silently.
 - Individual session failures are acceptable. Log them but continue processing.
 
@@ -116,4 +132,4 @@ After Phase 2, check for plugin-specific metric files:
 - `~/.claude/deep-research/metrics.jsonl`
 - Similar patterns for other known plugins
 
-If found, read and merge relevant metrics into the aggregate data.
+If found, read and merge into aggregate data.

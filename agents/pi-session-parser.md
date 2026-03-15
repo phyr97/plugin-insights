@@ -45,13 +45,22 @@ For each JSONL file path provided:
    - List commands used
    - Count errors (tool_results containing error messages)
 
-4. For token usage: use Grep to find lines with `"usage"` and `output_tokens`, read a sample of those lines with Read (use offset/limit to read specific ranges, max 50 lines). Sum the values you find.
+4. Token usage extraction (REQUIRED, do not skip):
+   a. Use Grep to search for `"output_tokens"` in the file with output_mode "content" and head_limit 30.
+   b. From the matching lines, extract `input_tokens` and `output_tokens` values.
+   c. Take the LAST occurrence (highest values, as usage may be cumulative).
+   d. If Grep returns no matches or fails, set token values to null. Do NOT set to 0.
 
 5. Check for subagents/ directory next to the JSONL: use Glob for `<session-dir>/subagents/*.meta.json`. If found, read meta files to get agent types.
 
-6. Extract message excerpts: For each plugin invocation found, use Read with offset/limit to get the 5 lines before and 10 lines after that line number. Per message, include only type and content (truncated to 200 characters).
+6. Extract message excerpts for facet analysis:
+   - For each plugin invocation found, use Read with offset/limit to get the 5 lines before and 10 lines after that line number.
+   - Per message, include `type` and content truncated to 400 characters.
+   - EXCLUDE tool_result content blocks entirely (they are too large and not useful for qualitative assessment).
+   - Only include `type: "text"` blocks and `type: "tool_use"` blocks (just name and input summary, not full input).
+   - Include user messages in full (up to 400 chars).
 
-7. Calculate duration: Read the first line (offset 0, limit 1) and use Grep to find the last timestamp.
+7. Calculate duration: Read the first line (offset 0, limit 1) and the last few lines (use Grep for the last timestamp pattern).
 
 8. Derive project from the file path: the directory name between `/projects/` and the session UUID.
 
