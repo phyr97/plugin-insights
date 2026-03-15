@@ -10,35 +10,52 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 
 ## Iron Laws (NON-NEGOTIABLE)
 
-1. NEVER read full JSONL files yourself. Delegate ALL parsing to pi-session-parser agents.
+1. NEVER read full JSONL files yourself. Delegate ALL detailed parsing to pi-session-parser agents.
 2. NEVER do qualitative assessment yourself. Delegate to pi-facet-extractor agents.
 3. ALWAYS write an HTML report file. No chat-only output.
 4. Respect batch sizes: max 15 sessions per parser, max 15 assessments per facet-extractor.
 5. ALWAYS read the reference template before writing the report. Use EXACTLY the CSS and HTML structure from the template. Do not invent your own styles or layout.
 
-## Phase 1: Discovery
+## Phase 1: Discovery and pre-filtering
 
 1. Parse arguments: extract optional plugin filter and --days N (default 7).
-2. List all JSONL session files:
+
+2. If a plugin filter is given, validate it:
+   - Use Grep to scan a sample of recent JSONL files (up to 20) for the exact plugin name in `subagent_type` or `command-name` patterns.
+   - Collect all unique plugin names found (extract the part before the colon from `subagent_type` values).
+   - If the given filter matches no plugin exactly, check for fuzzy matches:
+     - Substring matches (e.g. "research" matches "deep-research")
+     - Common abbreviations (e.g. "dr" could mean "deep-research")
+   - If fuzzy matches are found, present them to the user: "Plugin 'X' not found. Did you mean one of these? 1. deep-research  2. review  3. ..." and wait for confirmation.
+   - If no matches at all, report "No plugin matching 'X' found in recent sessions" and stop.
+
+3. List all JSONL session files and filter by mtime:
    ```
    Glob("~/.claude/projects/*/*.jsonl")
    ```
-3. Filter by timestamp (file mtime within --days range) using Bash(python3:...):
+   Filter by timestamp using Bash(python3:...):
    ```python
    import os, time; cutoff = time.time() - DAYS*86400
    # filter files where mtime >= cutoff
    ```
-4. Group filtered files into batches of 15.
-5. Report to user: "Found N sessions in M projects from the last D days. Processing in B batches..."
+
+4. Pre-filter sessions (ORCHESTRATOR does this, not agents):
+   If a plugin filter is set, use Grep to scan each session file for the structural pattern `"name":\s*"Agent".*subagent_type.*<plugin-name>:` OR `<command-name>.*<plugin-name>:`. Use output_mode "count" for speed. Only keep files with at least 1 match.
+
+   This step dramatically reduces the number of files sent to parser agents. Report: "Found N sessions total, M contain <plugin-name> activity. Sending M sessions to parsers in B batches..."
+
+   If no plugin filter: skip pre-filtering, send all sessions to parsers.
+
+5. Group the filtered files into batches of 15.
 
 ## Phase 2: Parse (parallel batches)
 
-Spawn pi-session-parser agents. Each agent has inline references in its definition, so no external files need to be passed. For each batch:
+Spawn pi-session-parser agents with model "sonnet" (not haiku, sonnet produces more reliable token extraction and excerpt quality). Each agent has inline references in its definition.
 
 ```
 Agent(
   subagent_type: "plugin-insights:pi-session-parser",
-  model: "haiku",
+  model: "sonnet",
   prompt: "Parse these JSONL files for plugin activity.\n\nFiles:\n<file-list>\n\n<optional: Only extract data for plugin: X>"
 )
 ```
@@ -52,7 +69,7 @@ Agent(
 
 Collect all `excerpts` from parser results. Bundle into batches of max 15 assessments.
 
-Spawn pi-facet-extractor agents. Each agent has inline assessment dimensions, so no external files need to be passed:
+Spawn pi-facet-extractor agents (haiku is fine here since this is pure text assessment with no tool calls):
 
 ```
 Agent(
