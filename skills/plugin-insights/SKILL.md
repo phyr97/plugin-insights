@@ -12,10 +12,9 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 
 1. NEVER read full JSONL files yourself. Delegate ALL parsing to pi-session-parser agents.
 2. NEVER do qualitative assessment yourself. Delegate to pi-facet-extractor agents.
-3. ALWAYS write an HTML report using the template file. NEVER generate your own HTML structure.
+3. ALWAYS write an HTML report file. No chat-only output.
 4. Respect batch sizes: max 15 sessions per parser, max 15 assessments per facet-extractor.
-5. ALWAYS use Bash(python3:...) to read the template file and replace placeholders via str.replace(). The python script must read the ACTUAL template file from disk. NEVER write HTML yourself.
-6. ALWAYS read the template from `${CLAUDE_SKILL_DIR}/report-template.html`. Pass this exact path to the python script.
+5. ALWAYS read the reference template before writing the report. Use EXACTLY the CSS and HTML structure from the template. Do not invent your own styles or layout.
 
 ## Phase 1: Discovery
 
@@ -67,63 +66,71 @@ Agent(
 - Collect structured assessment JSON
 - On agent failure: log the error, continue with remaining batches
 
-## Phase 4: Aggregate and report
+## Phase 4: Aggregate
 
 1. Compute per-plugin aggregates:
    - Total invocations, sessions, unique projects
    - Token consumption (input + output, main + subagents)
    - Error rate (errors / invocations)
-   - Average correction_score, average completion_score (exclude default 1.0 scores from averages if possible)
+   - Average correction_score, average completion_score (exclude default 1.0 scores if possible)
    - Top friction points (group similar ones by keyword overlap)
    - Top strengths (group similar ones)
-   - Trend over time: bucket sessions by ISO week, compute invocations per week for the last 7 weeks
+   - Trend over time: bucket sessions by ISO week, compute invocations per week
 
-2. Mark sessions from projects whose path contains the plugin name itself as "dev sessions" (e.g. sessions from `*-deep-research*` when analyzing deep-research). Report dev vs. production stats separately.
+2. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
 
 3. Generate improvement suggestions per plugin:
    - High correction scores (avg > 1.5) -> "Plugin prompt needs refinement"
    - High error rates (> 20%) -> "Tool configuration or permission issues"
    - Low completion (avg < 1.0) -> "Scope or reliability problems"
 
-4. Build a JSON object containing all aggregated data. The JSON must include these keys matching template placeholders:
-   - `generated_date`, `date_range`
-   - `total_plugins`, `total_sessions`, `total_sessions_scanned`
-   - `total_tokens` (formatted like "1.2M" or "450K", or "N/A" if unavailable)
-   - `error_rate`, `error_rate_class` ("score-good"/"score-ok"/"score-bad"), `total_errors`
-   - `plugin_sections`: a complete HTML string for all per-plugin sections
-   - `empty_state`: empty string if plugins found, or `<div class="empty-state">No plugin activity found</div>` if none
-   Write this JSON to `/tmp/plugin-insights-data.json`.
+## Phase 5: Write HTML report
 
-5. The `plugin_sections` HTML string must use the CSS classes defined in the template:
-   - `.stats-row` with `.stat-label` and `.stat-value` spans
-   - `.score-badge` with `.score-good`/`.score-ok`/`.score-bad`
-   - `.plugin-tag` for agent types
-   - `.suggestion` for improvement suggestions
-   - `.trend-bar` with `.week` divs for weekly trend (height as percentage of max week)
-   - `<section>` wrapper with `<h2>` plugin name and `<h3>` sub-headings
-
-6. Read the HTML template file and render the report using Bash(python3:...):
-   ```python
-   import json, os
-   with open('/tmp/plugin-insights-data.json') as f:
-       data = json.load(f)
-   with open('<TEMPLATE_PATH>') as f:
-       html = f.read()
-   for key, value in data.items():
-       html = html.replace('{{' + key + '}}', str(value))
-   os.makedirs(os.path.expanduser('~/.claude/plugin-insights'), exist_ok=True)
-   with open(os.path.expanduser('~/.claude/plugin-insights/report.html'), 'w') as f:
-       f.write(html)
+1. Read the reference template:
    ```
-   TEMPLATE_PATH is the path to `report-template.html` read via `${CLAUDE_SKILL_DIR}/report-template.html`.
+   Read("${CLAUDE_SKILL_DIR}/report-template.html")
+   ```
 
-7. Print: "Report written to ~/.claude/plugin-insights/report.html"
+2. Write the final report using the Write tool to `~/.claude/plugin-insights/report.html`. Create the directory with `Bash(mkdir -p ~/.claude/plugin-insights)` first.
+
+### Report structure rules (follow exactly)
+
+The report MUST be a single self-contained HTML file. Copy the EXACT `<style>` block from the reference template including all CSS variables, media queries, and class definitions. Do not modify, simplify, or omit any CSS.
+
+The HTML body structure:
+- `<h1>Plugin Insights Report</h1>`
+- `<p class="subtitle">` with generation date and analysis period
+- `<div class="grid">` with exactly 4 `.card` elements: plugins analyzed, sessions with plugins, total tokens, error rate
+- One `<section>` per plugin containing:
+  - `<h2>` with plugin name
+  - `.stats-row` with invocations, sessions, projects, error rate
+  - `.stats-row` with score badges (`.score-badge .score-good`/`.score-ok`/`.score-bad`)
+  - `<h3>Agent types used</h3>` with `.plugin-tag` spans
+  - `<h3>Weekly trend</h3>` with `.trend-bar` containing `.week` divs (height proportional to max week)
+  - `<h3>Projects</h3>` with `<ul>` listing projects and their invocation counts, dev sessions marked as "(dev)"
+  - `<h3>Friction points</h3>` with `<ul>` if any, omit section if none
+  - `<h3>Strengths</h3>` with `<ul>` if any, omit section if none
+  - `<h3>Suggestions</h3>` with `.suggestion` divs if any
+- If no plugin activity found: `<div class="empty-state">No plugin activity found in the selected period</div>`
+- `<p class="footer">Generated by plugin-insights v0.1.0</p>`
+
+### Score badge rules
+
+- correction_score: 0-0.5 = `.score-good`, 0.5-1.5 = `.score-ok`, >1.5 = `.score-bad`
+- completion_score: 1.5-2.0 = `.score-good`, 1.0-1.5 = `.score-ok`, <1.0 = `.score-bad`
+- error_rate: 0-5% = `.score-good`, 5-20% = `.score-ok`, >20% = `.score-bad`
+
+### Trend bar rules
+
+Show the last 7 weeks. Each `.week` div height is `(week_count / max_week_count) * 100%` of the `.trend-bar` height (30px). Minimum height 2px.
+
+3. Print: "Report written to ~/.claude/plugin-insights/report.html"
 
 ## Error handling
 
 - If no JSONL files found in date range: report "No sessions found" and stop.
-- If no plugin activity found: write a minimal report using the template with `{{empty_state}}` filled and `{{plugin_sections}}` empty.
-- If all parser batches fail: write an error report listing which batches failed and why. Do not produce an empty report silently.
+- If no plugin activity found: write a minimal report with the empty state message.
+- If all parser batches fail: write an error report listing which batches failed and why.
 - Individual session failures are acceptable. Log them but continue processing.
 
 ## Optional: Plugin-specific metrics
