@@ -39,13 +39,17 @@ Use Grep for `"name":\s*"Agent".*subagent_type` with output_mode "content". Also
 
 ### Step 2: Behavioral metrics
 For each verified invocation, extract:
-- **retry**: Is the same plugin called again later in this session? (count total invocations of this plugin in session)
+- **retry_count**: Total invocations of this plugin in the session. If >1, check whether the user_question changed between invocations. If the question is substantially different, count it as a new question (retry_same_topic = false), not a retry. If the question is similar or identical, it is a real retry (retry_same_topic = true).
 - **continuation**: Count user messages after the last plugin-related message in the session. More messages = user continued working (good sign).
 - **errors_after**: Grep for `"error"` or `"Error"` in the 20 lines after the invocation. Count matches.
 - **next_actions**: Read 5 lines after the plugin output. What tools does the assistant use next? (Edit/Write = manual follow-up work, Agent = delegation continued, text = final answer)
 
 ### Step 3: Token usage
-Grep for `"output_tokens"` with output_mode "content" and head_limit 30. Take the LAST occurrence (cumulative). If no matches, set to null.
+Try multiple approaches to extract token data:
+a. Grep for `"output_tokens"` with output_mode "content" and head_limit 30.
+b. If that returns results, parse the JSON fragments to extract `input_tokens` and `output_tokens` values. The values appear as `"input_tokens":12345,"output_tokens":6789`. Use the LAST (highest) values found.
+c. If Grep returns empty or the lines are too long to parse, try reading the last 20 lines of the file with Read (offset = total lines - 20). The final assistant message often contains cumulative usage.
+d. If all approaches fail, set to null. Do NOT set to 0 or make up values.
 
 ### Step 4: Context extraction for quality review
 For each invocation, extract:
