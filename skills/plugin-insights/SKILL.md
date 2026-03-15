@@ -103,18 +103,31 @@ It returns: relevance score (0-3), depth score (0-3), actionability score (0-3),
      - Post-plugin error rate
    - Trend over time: bucket sessions by ISO week
 
-2. Compute quality aggregates from reviewer data:
+2. Derive correction and completion scores from behavioral data (no LLM needed):
+   - correction_score per session:
+     - 0 (no correction): retry_count == 0 AND errors_after == 0 AND next_actions contains no Edit/Write
+     - 1 (minor): next_actions contains Edit or Write (manual follow-up) but no retry
+     - 2 (significant): retry_count >= 1 (user re-ran the plugin)
+     - 3 (abandoned): continuation_messages <= 2 AND session ended shortly after plugin call
+   - completion_score per session:
+     - 0 (abandoned): continuation_messages == 0 AND duration after plugin < 2 minutes
+     - 1 (partial): continuation_messages 1-3 OR next_actions contains manual Edit/Write work
+     - 2 (complete): continuation_messages > 3 AND no retry AND no errors_after
+
+3. Compute quality aggregates from reviewer data:
    - Average relevance, depth, actionability scores
    - Common "missing" themes
    - Common strengths
    - Notable verdicts (best and worst)
 
-3. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
+4. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
 
-4. Generate improvement suggestions:
+5. Generate improvement suggestions:
    - Low relevance (avg < 1.5) -> "Plugin often misses what the user is asking for"
    - Low depth (avg < 1.5) -> "Results are too superficial, consider increasing analyst count or search depth"
    - Low actionability (avg < 1.5) -> "Results need more concrete recommendations or code examples"
+   - High correction score (avg > 1.5) -> "Users frequently correct or redo plugin output"
+   - Low completion (avg < 1.0) -> "Plugin results are often abandoned"
    - High retry rate (> 30%) -> "Users frequently need to re-run the plugin"
    - High error rate (> 20%) -> "Tool configuration or permission issues"
 
@@ -139,6 +152,7 @@ The HTML body structure:
   - `<h2>` with plugin name
   - `.stats-row` with invocations, sessions, projects, error rate
   - `.stats-row` with quality score badges: relevance, depth, actionability (use `.score-badge`)
+  - `.stats-row` with behavioral score badges: correction, completion (use `.score-badge`)
   - `.stats-row` with behavioral metrics: retry rate, avg continuation, post-error rate
   - `<h3>Agent types used</h3>` with `.plugin-tag` spans
   - `<h3>Weekly trend</h3>` with `.trend-bar` containing `.week` divs (height proportional to max week)
@@ -153,6 +167,8 @@ The HTML body structure:
 ### Score badge rules
 
 - relevance/depth/actionability: 2.0-3.0 = `.score-good`, 1.0-2.0 = `.score-ok`, <1.0 = `.score-bad`
+- correction_score: 0-0.5 = `.score-good`, 0.5-1.5 = `.score-ok`, >1.5 = `.score-bad`
+- completion_score: 1.5-2.0 = `.score-good`, 1.0-1.5 = `.score-ok`, <1.0 = `.score-bad`
 - error_rate: 0-5% = `.score-good`, 5-20% = `.score-ok`, >20% = `.score-bad`
 - retry_rate: 0-15% = `.score-good`, 15-30% = `.score-ok`, >30% = `.score-bad`
 
