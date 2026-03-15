@@ -6,16 +6,31 @@
   <title>Plugin Insights Report</title>
   <style>
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2a2d3a;
-      --text: #e1e4ed;
-      --text-dim: #8b8fa3;
-      --accent: #6c8aff;
-      --accent-dim: #3d5afe;
-      --green: #4caf50;
-      --yellow: #ffb74d;
-      --red: #ef5350;
+      --bg: #ffffff;
+      --surface: #f8f9fa;
+      --border: #e1e4e8;
+      --text: #1f2328;
+      --text-dim: #656d76;
+      --accent: #4969ed;
+      --accent-dim: #3451b2;
+      --green: #1a7f37;
+      --yellow: #bf8700;
+      --red: #cf222e;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1117;
+        --surface: #1a1d27;
+        --border: #2a2d3a;
+        --text: #e1e4ed;
+        --text-dim: #8b8fa3;
+        --accent: #6c8aff;
+        --accent-dim: #3d5afe;
+        --green: #4caf50;
+        --yellow: #ffb74d;
+        --red: #ef5350;
+      }
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -172,13 +187,13 @@
       font-weight: 600;
     }
 
-    .score-good { background: rgba(76, 175, 80, 0.15); color: var(--green); }
-    .score-ok { background: rgba(255, 183, 77, 0.15); color: var(--yellow); }
-    .score-bad { background: rgba(239, 83, 80, 0.15); color: var(--red); }
+    .score-good { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+    .score-ok { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }
+    .score-bad { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
 
     .suggestion {
       padding: 0.75rem 1rem;
-      background: rgba(108, 138, 255, 0.08);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
       border-left: 3px solid var(--accent);
       border-radius: 0 4px 4px 0;
       margin-bottom: 0.75rem;
