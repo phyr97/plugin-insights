@@ -8,31 +8,36 @@ Analyzes JSONL session transcripts from Claude Code and generates an HTML report
 - `/plugin-insights <name>` -- Analyze a specific plugin (e.g. `deep-research`)
 - `/plugin-insights --days N` -- Adjust the analysis period (default: 7 days)
 
+Fuzzy matching: if the plugin name doesn't match exactly, the command suggests similar plugin names found in recent sessions.
+
 ## Architecture
 
-Three-tier agent hierarchy:
+Three-phase agent pipeline:
 
-1. Orchestrator (session model): Coordinates the workflow, aggregates results, renders the HTML report via Python script
-2. Parser agents (Haiku): Read JSONL files, extract plugin activity and token usage
-3. Facet agents (Haiku): Assess plugin usage qualitatively based on message excerpts
+1. Orchestrator (session model): Discovers sessions, pre-filters by plugin, coordinates agents, aggregates results, writes the HTML report
+2. Parser agents (Sonnet): Read JSONL files, extract verified plugin invocations, behavioral metrics, token usage, and context for quality review
+3. Quality reviewer (Sonnet): Evaluates the most recent plugin invocations for content relevance, depth, and actionability
 
-The orchestrator never reads JSONL files directly. All parsing is delegated to parser agents. Template rendering runs via `python3` with `str.replace()`.
+The orchestrator pre-filters sessions via Grep before sending them to parsers. This reduces the number of agents needed (typically 2-3 instead of 8+). Behavioral scores (correction, completion) are derived from structural patterns, not LLM assessment.
 
 ## Directory structure
 
 ```
-commands/plugin-insights.md           # Orchestrator slash command
-agents/pi-session-parser.md           # JSONL parser agent (Haiku)
-agents/pi-facet-extractor.md          # Qualitative facet extraction (Haiku)
+commands/plugin-insights.md           # Slash command (thin wrapper)
+agents/pi-session-parser.md           # JSONL parser agent (Sonnet)
+agents/pi-quality-reviewer.md         # Content quality reviewer (Sonnet)
 skills/plugin-insights/
   SKILL.md                            # Orchestration logic
   references/
     jsonl-schema.md                   # JSONL field documentation
-    facet-dimensions.md               # Qualitative assessment dimensions
     detection-patterns.md             # Plugin detection patterns
-  report-template.html                # HTML report template
+  report-template.html                # HTML report reference template
 ```
 
 ## Output
 
-Report is written to `~/.claude/plugin-insights/report.html`. Self-contained HTML file with embedded CSS, no JavaScript.
+Report is written to `~/.claude/plugin-insights/report.html`. Self-contained HTML file with embedded CSS, no JavaScript. Supports light and dark mode via system preference.
+
+## No external dependencies
+
+No Python, Node, or other runtimes required. The orchestrator writes HTML directly via the Write tool, guided by the reference template. Session discovery uses `find`.

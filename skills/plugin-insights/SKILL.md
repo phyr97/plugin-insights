@@ -5,7 +5,7 @@ description: |
   Use when: "plugin insights", "plugin performance", "how are my plugins doing",
   "plugin analysis", "plugin report", "which plugins work well".
   Generates an HTML report from JSONL session transcripts.
-allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash(wc:*), Bash(mkdir:*), Agent, Write
+allowed-tools: Read, Glob, Grep, Bash(find:*), Bash(echo:*), Bash(ls:*), Bash(wc:*), Bash(mkdir:*), Agent, Write
 ---
 
 ## Iron Laws (NON-NEGOTIABLE)
@@ -29,15 +29,11 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
    - If fuzzy matches are found, present them to the user: "Plugin 'X' not found. Did you mean one of these? 1. deep-research  2. review  3. ..." and wait for confirmation.
    - If no matches at all, report "No plugin matching 'X' found in recent sessions" and stop.
 
-3. List all JSONL session files and filter by mtime:
+3. List all JSONL session files modified within the --days range:
+   ```bash
+   find ~/.claude/projects -name "*.jsonl" -maxdepth 2 -mtime -DAYS
    ```
-   Glob("~/.claude/projects/*/*.jsonl")
-   ```
-   Filter by timestamp using Bash(python3:...):
-   ```python
-   import os, time; cutoff = time.time() - DAYS*86400
-   # filter files where mtime >= cutoff
-   ```
+   This returns only session files modified within the last N days. No Python needed.
 
 4. Pre-filter sessions (ORCHESTRATOR does this, not agents):
    If a plugin filter is set, use Grep to scan each session file for the structural pattern `"name":\s*"Agent".*subagent_type.*<plugin-name>:` OR `<command-name>.*<plugin-name>:`. Use output_mode "count" for speed. Only keep files with at least 1 match.
