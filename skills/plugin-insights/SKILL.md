@@ -11,10 +11,10 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 ## Iron Laws (NON-NEGOTIABLE)
 
 1. NEVER read full JSONL files yourself. Delegate ALL detailed parsing to pi-session-parser agents.
-2. NEVER do qualitative assessment yourself. Delegate to pi-facet-extractor agents.
+2. NEVER do content quality assessment yourself. Delegate to pi-quality-reviewer agents.
 3. ALWAYS write an HTML report file. No chat-only output.
-4. Respect batch sizes: max 15 sessions per parser, max 15 assessments per facet-extractor.
-5. ALWAYS read the reference template before writing the report. Use EXACTLY the CSS and HTML structure from the template. Do not invent your own styles or layout.
+4. Respect batch sizes: max 15 sessions per parser, max 15 reviews per quality-reviewer.
+5. ALWAYS read the reference template before writing the report. Use EXACTLY the CSS and HTML structure from the template.
 
 ## Phase 1: Discovery and pre-filtering
 
@@ -42,7 +42,7 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 4. Pre-filter sessions (ORCHESTRATOR does this, not agents):
    If a plugin filter is set, use Grep to scan each session file for the structural pattern `"name":\s*"Agent".*subagent_type.*<plugin-name>:` OR `<command-name>.*<plugin-name>:`. Use output_mode "count" for speed. Only keep files with at least 1 match.
 
-   This step dramatically reduces the number of files sent to parser agents. Report: "Found N sessions total, M contain <plugin-name> activity. Sending M sessions to parsers in B batches..."
+   Report: "Found N sessions total, M contain <plugin-name> activity. Sending M sessions to parsers..."
 
    If no plugin filter: skip pre-filtering, send all sessions to parsers.
 
@@ -50,7 +50,7 @@ allowed-tools: Read, Glob, Grep, Bash(python3:*), Bash(echo:*), Bash(ls:*), Bash
 
 ## Phase 2: Parse (parallel batches)
 
-Spawn pi-session-parser agents with model "sonnet" (not haiku, sonnet produces more reliable token extraction and excerpt quality). Each agent has inline references in its definition.
+Spawn pi-session-parser agents (model: sonnet). Each agent extracts invocations, behavioral metrics, token usage, and brief quality notes.
 
 ```
 Agent(
@@ -62,44 +62,61 @@ Agent(
 
 - Spawn up to 4 parser agents in parallel per round
 - Collect structured JSON results from each agent
-- If a plugin filter was given, discard sessions without that plugin
 - On agent failure: log the error, continue with remaining batches
 
-## Phase 3: Facet extraction (parallel)
+## Phase 3: Quality review (dynamic sampling)
 
-Collect all `excerpts` from parser results. Bundle into batches of max 15 assessments.
+Collect all `invocation_details` from parser results. Sort by timestamp (most recent first).
 
-Spawn pi-facet-extractor agents (haiku is fine here since this is pure text assessment with no tool calls):
+Determine sample size:
+- Total invocations <= 10: review ALL
+- Total invocations 11-30: review the 10 most recent
+- Total invocations > 30: review the 10 most recent
+
+Spawn a single pi-quality-reviewer agent (model: sonnet):
 
 ```
 Agent(
-  subagent_type: "plugin-insights:pi-facet-extractor",
-  model: "haiku",
-  prompt: "Assess these plugin usage excerpts.\n\nExcerpts:\n<json-excerpts>"
+  subagent_type: "plugin-insights:pi-quality-reviewer",
+  model: "sonnet",
+  prompt: "Review these plugin invocations for content quality.\n\nInvocations:\n<json-invocation-details>"
 )
 ```
 
-- Spawn up to 4 facet agents in parallel
-- Collect structured assessment JSON
-- On agent failure: log the error, continue with remaining batches
+The quality reviewer receives per invocation:
+- user_question (up to 800 chars)
+- plugin_output_summary (up to 2000 chars)
+- quality_note from parser (1-2 sentences)
+- after_messages (5 messages)
+
+It returns: relevance score (0-3), depth score (0-3), actionability score (0-3), what was missing, what was done well, and an overall verdict per invocation.
 
 ## Phase 4: Aggregate
 
-1. Compute per-plugin aggregates:
+1. Compute per-plugin aggregates from parser data:
    - Total invocations, sessions, unique projects
-   - Token consumption (input + output, main + subagents)
+   - Token consumption (input + output)
    - Error rate (errors / invocations)
-   - Average correction_score, average completion_score (exclude default 1.0 scores if possible)
-   - Top friction points (group similar ones by keyword overlap)
-   - Top strengths (group similar ones)
-   - Trend over time: bucket sessions by ISO week, compute invocations per week
+   - Behavioral metrics averages:
+     - Retry rate (sessions with >1 invocation / total sessions)
+     - Avg continuation messages (higher = user kept working = good)
+     - Post-plugin error rate
+   - Trend over time: bucket sessions by ISO week
 
-2. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
+2. Compute quality aggregates from reviewer data:
+   - Average relevance, depth, actionability scores
+   - Common "missing" themes
+   - Common strengths
+   - Notable verdicts (best and worst)
 
-3. Generate improvement suggestions per plugin:
-   - High correction scores (avg > 1.5) -> "Plugin prompt needs refinement"
-   - High error rates (> 20%) -> "Tool configuration or permission issues"
-   - Low completion (avg < 1.0) -> "Scope or reliability problems"
+3. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
+
+4. Generate improvement suggestions:
+   - Low relevance (avg < 1.5) -> "Plugin often misses what the user is asking for"
+   - Low depth (avg < 1.5) -> "Results are too superficial, consider increasing analyst count or search depth"
+   - Low actionability (avg < 1.5) -> "Results need more concrete recommendations or code examples"
+   - High retry rate (> 30%) -> "Users frequently need to re-run the plugin"
+   - High error rate (> 20%) -> "Tool configuration or permission issues"
 
 ## Phase 5: Write HTML report
 
@@ -121,21 +138,23 @@ The HTML body structure:
 - One `<section>` per plugin containing:
   - `<h2>` with plugin name
   - `.stats-row` with invocations, sessions, projects, error rate
-  - `.stats-row` with score badges (`.score-badge .score-good`/`.score-ok`/`.score-bad`)
+  - `.stats-row` with quality score badges: relevance, depth, actionability (use `.score-badge`)
+  - `.stats-row` with behavioral metrics: retry rate, avg continuation, post-error rate
   - `<h3>Agent types used</h3>` with `.plugin-tag` spans
   - `<h3>Weekly trend</h3>` with `.trend-bar` containing `.week` divs (height proportional to max week)
-  - `<h3>Projects</h3>` with `<ul>` listing projects and their invocation counts, dev sessions marked as "(dev)"
-  - `<h3>Friction points</h3>` with `<ul>` if any, omit section if none
-  - `<h3>Strengths</h3>` with `<ul>` if any, omit section if none
-  - `<h3>Suggestions</h3>` with `.suggestion` divs if any
+  - `<h3>Projects</h3>` with `<ul>` listing projects and invocation counts, dev sessions marked "(dev)"
+  - `<h3>Quality reviews</h3>` with the individual review verdicts as a list. Show the user_question (truncated), the scores, and the verdict for each reviewed invocation.
+  - `<h3>Common strengths</h3>` with `<ul>` if any, omit if none
+  - `<h3>Areas for improvement</h3>` with `<ul>` combining "missing" themes and behavioral issues
+  - `<h3>Suggestions</h3>` with `.suggestion` divs
 - If no plugin activity found: `<div class="empty-state">No plugin activity found in the selected period</div>`
 - `<p class="footer">Generated by plugin-insights v0.1.0</p>`
 
 ### Score badge rules
 
-- correction_score: 0-0.5 = `.score-good`, 0.5-1.5 = `.score-ok`, >1.5 = `.score-bad`
-- completion_score: 1.5-2.0 = `.score-good`, 1.0-1.5 = `.score-ok`, <1.0 = `.score-bad`
+- relevance/depth/actionability: 2.0-3.0 = `.score-good`, 1.0-2.0 = `.score-ok`, <1.0 = `.score-bad`
 - error_rate: 0-5% = `.score-good`, 5-20% = `.score-ok`, >20% = `.score-bad`
+- retry_rate: 0-15% = `.score-good`, 15-30% = `.score-ok`, >30% = `.score-bad`
 
 ### Trend bar rules
 
