@@ -19,7 +19,14 @@ Before ANY other action, extract from the arguments above:
 If a plugin filter is present, set PLUGIN_FILTER to that word and use it in ALL subsequent phases.
 If no arguments or empty: PLUGIN_FILTER = none, scan all plugins.
 
-You CANNOT proceed to Phase 1 without having parsed this block.
+## REQUIRED OUTPUT (print this before doing anything else)
+
+```
+PLUGIN_FILTER = <extracted filter or "none">
+DAYS = <extracted days or "7">
+```
+
+You MUST print the block above as your first output. If you cannot fill in both values, re-read the $ARGUMENTS line. You CANNOT call any tool, run any command, or proceed to Phase 1 until this block is printed.
 
 ## Iron Laws (NON-NEGOTIABLE)
 
@@ -27,24 +34,28 @@ You CANNOT proceed to Phase 1 without having parsed this block.
 2. NEVER do content quality assessment yourself. Delegate to pi-quality-reviewer agents.
 3. ALWAYS write an HTML report file. No chat-only output.
 4. Respect batch sizes: max 15 sessions per parser, max 15 reviews per quality-reviewer.
-5. NEVER write the HTML report yourself. ALWAYS delegate report writing to the pi-report-writer agent.
-6. ALWAYS pass PLUGIN_FILTER to parser agents. If PLUGIN_FILTER is set, every parser agent prompt MUST include "Only extract data for plugin: PLUGIN_FILTER".
+5. NEVER write the HTML report yourself. ALWAYS delegate to pi-report-writer agent.
+6. ALWAYS pass PLUGIN_FILTER to parser agents with exact phrase: "Only extract data for plugin: PLUGIN_FILTER".
+7. ALWAYS use model: "sonnet" when spawning pi-session-parser and pi-quality-reviewer agents. Never inherit the parent model.
+8. Phase 3 (Quality Review) is NEVER optional. Even with 1 invocation, spawn the quality-reviewer.
+9. Report output path is ALWAYS `~/.claude/plugin-insights/report-<name>-<YYYY-MM-DD-HHmm>.html`. Never write to the current working directory.
+10. ALWAYS pass the template file path AND structured JSON data to the report-writer agent.
 
 ## Anti-skip rules
 
 | Thought | Reality |
 |---------|---------|
-| "No plugin filter given" | Check the $ARGUMENTS block above. If it contains a word like "review", that IS the filter. |
-| "I'll filter later during aggregation" | Pre-filtering in Phase 1 saves 80% of parser token costs. Do it now. |
-| "Let me start finding files first" | STOP. Parse arguments before touching any files. |
-| "I'll scan everything and filter later" | NO. The pre-filter step is MANDATORY when PLUGIN_FILTER is set. |
+| "No plugin filter given" | Check the REQUIRED OUTPUT block. If PLUGIN_FILTER is not "none", use it. |
+| "I'll filter later during aggregation" | Pre-filtering in Phase 1 saves 80% of token costs. Do it now. |
+| "Let me start finding files first" | STOP. Print the REQUIRED OUTPUT block first. |
+| "I'll scan everything and filter later" | NO. Pre-filter is MANDATORY when PLUGIN_FILTER is set. |
+| "Only 3 invocations, skip quality review" | NO. Phase 3 is mandatory regardless of count (Iron Law 8). |
+| "I'll use the default model" | NO. Explicitly set model: "sonnet" on every agent spawn (Iron Law 7). |
+| "I'll write the report to the current directory" | NO. Always ~/.claude/plugin-insights/ (Iron Law 9). |
 
 ## Phase 1: Discovery and pre-filtering
 
-1. **GATE CHECK** — Confirm argument parsing:
-   - State the plugin filter you extracted: "PLUGIN_FILTER = ___" (or "none")
-   - State the --days value you extracted: "DAYS = ___" (or "7")
-   - If you cannot answer both, go back to the argument parsing block above.
+1. Verify you printed the REQUIRED OUTPUT block. If not, go back and print it now.
 
 2. If PLUGIN_FILTER is set, validate it:
    - Use Grep to scan a sample of recent JSONL files (up to 20) for the exact plugin name in `subagent_type` or `command-name` patterns.
@@ -57,15 +68,24 @@ You CANNOT proceed to Phase 1 without having parsed this block.
 
 3. List all JSONL session files modified within the DAYS range:
    ```bash
-   find ~/.claude/projects -name "*.jsonl" -maxdepth 2 -mtime -DAYS
+   find ~/.claude/projects -name "*.jsonl" -maxdepth 2 -mtime -DAYS ! -path "*/subagents/*"
    ```
 
 4. **MANDATORY pre-filter** (if PLUGIN_FILTER is set):
-   You MUST grep each session file BEFORE adding it to a batch.
-   Pattern: `"name":\s*"Agent".*subagent_type.*PLUGIN_FILTER:` OR `command-name.*PLUGIN_FILTER:`
-   Use output_mode "count" for speed. Only files with >= 1 match go to parsers.
+   Use the Grep tool (NOT bash grep) on each session file. Copy-paste this exact pattern:
 
-   Report: "Found N sessions total, M contain PLUGIN_FILTER activity. Sending M to parsers..."
+   ```
+   Grep(pattern: "subagent_type.*PLUGIN_FILTER:", path: "<file>", output_mode: "count")
+   ```
+
+   Also check for command-name:
+   ```
+   Grep(pattern: "command-name.*PLUGIN_FILTER:", path: "<file>", output_mode: "count")
+   ```
+
+   Only files where either grep returns >= 1 match go to parsers. Discard all others.
+
+   Print: "Found N sessions total, M contain PLUGIN_FILTER activity. Sending M to parsers in B batches..."
 
    If PLUGIN_FILTER is "none": skip pre-filtering, send all sessions to parsers.
 
@@ -73,7 +93,7 @@ You CANNOT proceed to Phase 1 without having parsed this block.
 
 ## Phase 2: Parse (parallel batches)
 
-Spawn pi-session-parser agents (model: sonnet). Each agent extracts invocations, behavioral metrics, token usage, and brief quality notes.
+Spawn pi-session-parser agents. MUST use model: "sonnet" explicitly.
 
 ```
 Agent(
@@ -89,7 +109,9 @@ If PLUGIN_FILTER is "none", omit the "Only extract data for plugin" line.
 - Collect structured JSON results from each agent
 - On agent failure: log the error, continue with remaining batches
 
-## Phase 3: Quality review (dynamic sampling)
+## Phase 3: Quality review (MANDATORY, never skip)
+
+This phase is NOT optional. Even with 1 invocation, run the quality reviewer.
 
 Collect all `invocation_details` from parser results. Sort by timestamp (most recent first).
 
@@ -98,7 +120,7 @@ Determine sample size:
 - Total invocations 11-30: review the 10 most recent
 - Total invocations > 30: review the 10 most recent
 
-Spawn a single pi-quality-reviewer agent (model: sonnet):
+Spawn a single pi-quality-reviewer agent. MUST use model: "sonnet" explicitly:
 
 ```
 Agent(
@@ -123,24 +145,21 @@ It returns: relevance score (0-3), depth score (0-3), actionability score (0-3),
    - Token consumption (input + output)
    - Error rate (errors / invocations)
    - Behavioral metrics averages:
-     - Retry rate (sessions with >1 invocation / total sessions)
-     - Avg continuation messages (higher = user kept working = good)
+     - Retry rate (sessions with retry_same_topic == true / total sessions)
+     - Avg continuation messages
      - Post-plugin error rate
    - Trend over time: bucket sessions by ISO week
 
-2. Derive correction and completion scores from behavioral data (no LLM needed):
+2. Derive correction and completion scores from behavioral data:
    - correction_score per session:
-     - 0 (no correction): no same-topic retries AND errors_after == 0 AND next_actions contains no Edit/Write
-     - 1 (minor): next_actions contains Edit or Write (manual follow-up) but no same-topic retry
-     - 2 (significant): retry_same_topic == true (user re-ran with same question)
-     - 3 (abandoned): continuation_messages == 0 AND session ended shortly after plugin call
+     - 0: no same-topic retries AND errors_after == 0 AND next_actions contains no Edit/Write
+     - 1: next_actions contains Edit or Write but no same-topic retry
+     - 2: retry_same_topic == true
+     - 3: continuation_messages == 0 AND session ended shortly after
    - completion_score per session:
-     - 0 (abandoned): continuation_messages == 0 AND session ended within 2 minutes
-     - 1 (partial): continuation_messages 1-2 AND next_actions contains manual work
-     - 2 (complete): continuation_messages >= 1 AND no same-topic retry AND no errors_after (user moved on = task was done)
-   - Note: "user moved on" is the strongest completion signal. If the user sends a new unrelated message or starts a new task, the plugin did its job.
-
-   Retry rate calculation: only count sessions with retry_same_topic == true, not sessions where the user asked a different question to the same plugin.
+     - 0: continuation_messages == 0 AND session ended within 2 minutes
+     - 1: continuation_messages 1-2 AND next_actions contains manual work
+     - 2: continuation_messages >= 1 AND no same-topic retry AND no errors_after
 
 3. Compute quality aggregates from reviewer data:
    - Average relevance, depth, actionability scores
@@ -148,27 +167,71 @@ It returns: relevance score (0-3), depth score (0-3), actionability score (0-3),
    - Common strengths
    - Notable verdicts (best and worst)
 
-4. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report dev vs. production stats separately.
+4. Mark sessions from projects whose path contains the plugin name as "dev sessions". Report separately.
 
-5. Generate improvement suggestions:
+5. Generate improvement suggestions per the threshold rules:
    - Low relevance (avg < 1.5) -> "Plugin often misses what the user is asking for"
-   - Low depth (avg < 1.5) -> "Results are too superficial, consider increasing analyst count or search depth"
-   - Low actionability (avg < 1.5) -> "Results need more concrete recommendations or code examples"
-   - High correction score (avg > 1.5) -> "Users frequently correct or redo plugin output"
+   - Low depth (avg < 1.5) -> "Results are too superficial"
+   - Low actionability (avg < 1.5) -> "Results need more concrete recommendations"
+   - High correction (avg > 1.5) -> "Users frequently correct or redo plugin output"
    - Low completion (avg < 1.0) -> "Plugin results are often abandoned"
    - High retry rate (> 30%) -> "Users frequently need to re-run the plugin"
    - High error rate (> 20%) -> "Tool configuration or permission issues"
 
+6. Build the aggregated data as a JSON object with this exact structure:
+
+```json
+{
+  "metadata": {
+    "version": "0.3.1",
+    "generated_date": "YYYY-MM-DD",
+    "date_range": "YYYY-MM-DD to YYYY-MM-DD",
+    "days": 7,
+    "plugin_filter": "review",
+    "total_sessions_scanned": 113,
+    "sessions_with_activity": 5
+  },
+  "plugins": {
+    "<name>": {
+      "invocations": 10,
+      "sessions": 5,
+      "projects": 3,
+      "error_rate": 0.0,
+      "tokens": { "input": 50000, "output": 12000 },
+      "behavioral": {
+        "retry_rate": 0.1,
+        "avg_continuation": 5.2,
+        "post_error_rate": 0.0,
+        "avg_correction_score": 0.4,
+        "avg_completion_score": 1.8
+      },
+      "quality": {
+        "avg_relevance": 2.5,
+        "avg_depth": 2.3,
+        "avg_actionability": 2.1
+      },
+      "agent_types": ["type-a", "type-b"],
+      "trend_weeks": [{"week": "W10", "count": 3}, {"week": "W11", "count": 7}],
+      "projects_list": [{"name": "...", "sessions": 2, "invocations": 5, "is_dev": false}],
+      "quality_reviews": [...],
+      "strengths": ["..."],
+      "improvements": ["..."],
+      "suggestions": ["..."]
+    }
+  }
+}
+```
+
+Pass this JSON (as a string) to the report-writer in Phase 5.
+
 ## Phase 5: Write HTML report (DELEGATED to report-writer agent)
 
-Do NOT write the HTML report yourself. Delegate to a dedicated pi-report-writer agent. This agent has a fresh context with only the template and data, preventing instruction drift.
+Do NOT write the HTML report yourself.
 
-1. Determine the output file path:
-   - Format: `~/.claude/plugin-insights/report-<plugin-name>-<YYYY-MM-DD-HHmm>.html`
-   - With plugin filter: `report-deep-research-2026-03-15-1430.html`
-   - Without filter: `report-all-2026-03-15-1430.html`
+1. Output file path: `~/.claude/plugin-insights/report-<PLUGIN_FILTER>-<YYYY-MM-DD-HHmm>.html`
+   (or `report-all-...` if no filter). Create directory with `Bash(mkdir -p ~/.claude/plugin-insights)`.
 
-2. Build the aggregated data as a JSON string containing all metrics, scores, reviews, suggestions, and metadata (version "0.3.0", generated_date, date_range, etc.).
+2. Resolve the template path: `${CLAUDE_SKILL_DIR}/report-template.html` (absolute path).
 
 3. Spawn the report-writer agent:
 
@@ -176,18 +239,21 @@ Do NOT write the HTML report yourself. Delegate to a dedicated pi-report-writer 
 Agent(
   subagent_type: "plugin-insights:pi-report-writer",
   model: "sonnet",
-  prompt: "Write the plugin insights HTML report.\n\nTemplate file: <path-to-report-template.html>\nOutput file: <output-path>\n\nData:\n<json-aggregated-data>"
+  prompt: "Write the plugin insights HTML report.\n\nTemplate file: <ABSOLUTE-PATH-TO-TEMPLATE>\nOutput file: <ABSOLUTE-OUTPUT-PATH>\n\nData:\n<JSON-STRING-FROM-PHASE-4>"
 )
 ```
 
-The template path is `${CLAUDE_SKILL_DIR}/report-template.html`. Pass the resolved absolute path to the agent.
+The prompt MUST contain:
+- The absolute template file path (not a relative path, not ${CLAUDE_SKILL_DIR})
+- The absolute output file path under ~/.claude/plugin-insights/
+- The complete JSON data string from Phase 4
 
 4. Print the full path to the generated report file.
 
 ## Error handling
 
 - If no JSONL files found in date range: report "No sessions found" and stop.
-- If no plugin activity found: write a minimal report with the empty state message.
+- If no plugin activity found: write a minimal report with the empty state message via report-writer.
 - If all parser batches fail: write an error report listing which batches failed and why.
 - Individual session failures are acceptable. Log them but continue processing.
 
