@@ -134,7 +134,13 @@ It returns: relevance score (0-3), depth score (0-3), actionability score (0-3),
    Read("${CLAUDE_SKILL_DIR}/report-template.html")
    ```
 
-2. Write the final report using the Write tool to `~/.claude/plugin-insights/report.html`. Create the directory with `Bash(mkdir -p ~/.claude/plugin-insights)` first.
+2. Write the final report using the Write tool. Create the directory with `Bash(mkdir -p ~/.claude/plugin-insights)` first.
+
+   Filename format: `report-<plugin-name>-<YYYY-MM-DD-HHmm>.html`
+   - With plugin filter: `~/.claude/plugin-insights/report-deep-research-2026-03-15-1430.html`
+   - Without filter: `~/.claude/plugin-insights/report-all-2026-03-15-1430.html`
+
+   Use the current date/time for the timestamp. Never overwrite existing reports.
 
 ### Report structure rules (follow exactly)
 
@@ -172,7 +178,7 @@ The HTML body structure:
 
 Show the last 7 weeks. Each `.week` div height is `(week_count / max_week_count) * 100%` of the `.trend-bar` height (30px). Minimum height 2px.
 
-3. Print: "Report written to ~/.claude/plugin-insights/report.html"
+3. Print the full path to the generated report file.
 
 ## Error handling
 
