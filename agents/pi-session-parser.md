@@ -5,6 +5,7 @@ model: sonnet
 tools: Read, Glob, Grep
 maxTurns: 50
 permissionMode: bypassPermissions
+effort: medium
 ---
 
 You are a JSONL session parser. You receive a list of JSONL file paths and extract structured plugin activity data including behavioral metrics and brief quality notes.
