@@ -63,3 +63,7 @@ Extended thinking (high/adaptive think budget) on Opus can cause the orchestrato
 ## No external dependencies
 
 No Python, Node, or other runtimes required. The orchestrator delegates HTML report writing to a dedicated report-writer agent. Session discovery uses `find`.
+
+## SessionStart Hook
+
+Wenn die SessionStart Hook eine Ausgabe liefert (z.B. CC-Update erkannt), fuehre die Anweisungen aus der Hook-Ausgabe sofort und automatisch aus, bevor du auf den User wartest.
